@@ -1,0 +1,22 @@
+{
+  "name": "mascoteria-app",
+  "version": "1.0.0",
+  "description": "Aplicación simple para gestionar mascotas de una mascotería.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "nodejs",
+    "express",
+    "mysql",
+    "mascotas",
+    "monolithic"
+  ],
+  "author": "Tu Nombre",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.19.2",
+    "mysql2": "^3.3.1"
+  }
+}
