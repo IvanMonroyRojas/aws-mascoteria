@@ -43,6 +43,31 @@ Todos los archivos necesarios para la aplicación se encuentran en este reposito
 - `package.json` y `package-lock.json` – Dependencias del proyecto.
 - Carpeta `public/` – Archivos estáticos del frontend (`index.html`, `script.js`, `style.css`).
 
+Cambios necesarios para ejecutar en local
+
+De forma predeterminada, el archivo server.js está configurado para conectarse a la base de datos en Amazon RDS.
+Para ejecutar la aplicación en un entorno local con Docker, es necesario actualizar la configuración de conexión en server.js:
+
+- Cambiar el host a 127.0.0.1 o localhost.
+
+- Usar el port 3307 (mapeado en el contenedor).
+
+- Cambiar el user a root.
+
+- Cambiar la password a la definida en el contenedor (pass123).
+
+- Ejemplo de configuración local:
+
+```bash
+const dbConfig = {
+    host: '127.0.0.1',
+    port: 3307,
+    user: 'root',
+    password: 'pass123',
+    database: 'MascoteriaDB'
+};
+```
+
 Ejecución de la aplicación
 
 1. Instalar las dependencias del proyecto ejecutando:
