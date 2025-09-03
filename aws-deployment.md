@@ -141,3 +141,129 @@ sudo yum update -y
 sudo yum install -y nodejs npm
 ```
 Con esto, el servidor ya estará preparado para ejecutar la aplicación web.
+
+### Conexión de la aplicación a la base de datos RDS  
+
+Se edita la sección de configuración de la base de datos en el archivo `server.js` para que la aplicación web se conecte directamente a la **instancia RDS MySQL** creada en la **subnet privada**.  
+
+En este punto, se reemplazan los valores de `host`, `user` y `password` por los correspondientes a la RDS.  
+
+```js
+const dbConfig = {
+    host: '<RDS-ENDPOINT>',
+    port: 3306,
+    user: 'admin',
+    password: '<password-RDS>',
+    database: 'MascoteriaDB'
+};
+```
+
+### Copiar el repositorio a la instancia EC2  
+
+Para desplegar la aplicación en el servidor, se copia el repositorio completo desde la máquina local hacia la instancia **EC2**.  
+
+Este comando debe ejecutarse desde la carpeta donde se encuentra la clave `.pem` y el repositorio:  
+
+```bash
+scp -i "<nombre archivo claves.pem>" -r <Carpeta repositorio> ec2-user@<IP-pública-EC2>:/home/ec2-user/
+```
+
+Ejemplo:
+```bash
+scp -i "server-web-mascoteria.pem" -r C:\claves\mascoteria ec2-user@44.223.109.54:/home/ec2-user/
+```
+De esta forma, la carpeta del proyecto quedará disponible en /home/ec2-user/ dentro del servidor EC2.
+
+### Instalar dependencias y ejecutar la aplicación en EC2  
+
+De manera análoga a como se realiza en el entorno local, dentro del servidor **EC2** ingresamos a la carpeta del repositorio y ejecutamos los siguientes comandos:  
+
+```bash
+cd mascoteria
+npm install
+sudo node server.js
+```
+Con esto, la aplicación quedará corriendo en el puerto 80 de la instancia EC2 y podrá ser accedida desde el navegador a través de la IP pública del servidor.
+
+La aplicación web de la **Mascotería** queda activa en la instancia **EC2**, conectada correctamente al **RDS MySQL** en la subnet privada.  
+Ahora la página permite gestionar mascotas desde la interfaz web, almacenando los datos directamente en la base de datos en la nube.  
+<img width="921" height="595" alt="image" src="https://github.com/user-attachments/assets/6c1a71c0-05ed-472b-a16d-98b3cf6144ab" />
+
+### Creación de la AMI del servidor web  
+
+Para implementar escalabilidad en la solución, el primer paso es crear una **AMI (Amazon Machine Image)** a partir de la instancia **EC2** que contiene el servidor web.  
+Esta imagen incluye todo el entorno configurado y la aplicación desplegada, permitiendo que nuevas instancias puedan ser replicadas de forma horizontal de manera rápida y consistente.  
+
+<img width="928" height="151" alt="image" src="https://github.com/user-attachments/assets/6aeb0303-bdf2-4bee-bfd0-a5f55d7c1563" />
+
+### Creación de una segunda instancia EC2 a partir de la AMI  
+
+Utilizando la **AMI** previamente creada, se lanza una **segunda instancia EC2**.  
+Para automatizar el inicio de la aplicación web, se configura el siguiente **User Data**, que se ejecuta al iniciar la instancia:  
+
+```bash
+#!/bin/bash
+cd /home/ec2-user/mascoteria
+sudo node server.js &
+```
+Esta configuración asegura que el servidor web se inicie automáticamente al levantar la instancia, replicando el entorno original de manera rápida y consistente.
+
+Servidor creado con la AMI
+<img width="921" height="297" alt="image" src="https://github.com/user-attachments/assets/083a6f24-3874-4e75-befa-76613975d594" />
+
+Servidor Original
+<img width="921" height="235" alt="image" src="https://github.com/user-attachments/assets/6a12c4b0-9fb6-4f42-887e-ab966c623101" />
+
+### Configuración del Load Balancer  
+
+Para distribuir el tráfico entre las instancias EC2 que ejecutan la aplicación web, se realiza lo siguiente:
+
+1. Se crea un **Target Group** que apunta a las dos instancias EC2.
+2. Se lanza un **Elastic Load Balancer (ELB)** y se configura para que dirija el tráfico al Target Group previamente creado.
+
+Con esto, todo el tráfico HTTP hacia la aplicación será balanceado automáticamente entre las instancias disponibles, asegurando disponibilidad y tolerancia a fallos.
+
+Pagina web accedida desde el balanceador (observar URL)
+<img width="921" height="298" alt="image" src="https://github.com/user-attachments/assets/bb08da1a-bf6a-412f-a7bc-888ce271371b" />
+
+### Creación de la Launch Template
+
+Para automatizar el despliegue de nuevas instancias EC2 con la aplicación web, se crea una **Launch Template**:
+
+- Se utiliza la **AMI** previamente creada que contiene toda la aplicación lista para ejecutarse.
+- Se agregan los **comandos de User Data** para que, al iniciar la instancia, se ejecute automáticamente la aplicación:
+
+```bash
+#!/bin/bash
+cd /home/ec2-user/mascoteria
+sudo node server.js &
+```
+<img width="921" height="178" alt="image" src="https://github.com/user-attachments/assets/2390afb8-7580-42e4-80d0-131a68cf9af4" />
+
+### Creación del Auto Scaling Group
+
+Para habilitar la **escalabilidad automática** de la aplicación web:
+
+- Se crea un **Auto Scaling Group (ASG)** que despliega instancias EC2 según la demanda.
+- Se utiliza la **Launch Template** creada previamente, asegurando que cada instancia tenga la aplicación lista para ejecutarse.
+- Se adjunta el ASG al **Elastic Load Balancer** creado, para que el tráfico se distribuya automáticamente entre todas las instancias disponibles.
+- Se define que el **número deseado de instancias** es **3**, permitiendo que el ASG mantenga siempre esta cantidad de instancias activas, ajustando automáticamente si alguna falla o si se necesitan más instancias en caso de aumento de tráfico.
+<img width="921" height="139" alt="image" src="https://github.com/user-attachments/assets/95aa6eec-5b24-4fde-8a06-e8b4d6f1654f" />
+
+### Estado final de las instancias EC2
+
+- Como se definió un **número deseado de 3 instancias** en el Auto Scaling Group (ASG), se desplegaron automáticamente **3 nuevas instancias**.
+- Sumadas a las **2 instancias EC2 existentes** creadas previamente, actualmente tenemos un **total de 5 instancias EC2** corriendo.
+- Todas estas instancias se encuentran **detrás del Elastic Load Balancer**, que distribuye el tráfico de manera uniforme entre ellas.
+<img width="921" height="211" alt="image" src="https://github.com/user-attachments/assets/1a19e711-d482-4e6d-9ee7-12299186e60a" />
+
+### Verificación de escalabilidad
+
+- Al recargar la página web, se puede observar que **se muestran las nuevas IPs** correspondientes a las instancias EC2 **creadas automáticamente** por el Auto Scaling Group.
+- Esto confirma que el **balanceador de carga distribuye correctamente el tráfico** entre todas las instancias activas.
+
+<img width="921" height="290" alt="image" src="https://github.com/user-attachments/assets/280517fd-a902-44b1-a5a0-2aefc858bb79" />
+<img width="921" height="296" alt="image" src="https://github.com/user-attachments/assets/665c3786-597d-4e0c-b95a-c5020653ba8c" />
+
+
+
